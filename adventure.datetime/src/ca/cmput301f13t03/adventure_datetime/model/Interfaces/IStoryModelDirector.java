@@ -128,4 +128,18 @@ public interface IStoryModelDirector
 	 * @param comment
 	 */
 	public void addComment(Comment comment);
+	
+	/**
+	 * Changes a downloaded story to author mode
+	 * @param storyId, username
+	 * @return new UUID for the story
+	 */
+	public UUID setStoryToAuthor(UUID storyId, String username);
+
+	/**
+	 * Checks if story is authored by user
+	 * @return true if authored
+	 */
+	boolean isAuthored(UUID storyId);
+
 }

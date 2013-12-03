@@ -30,6 +30,8 @@ import ca.cmput301f13t03.adventure_datetime.model.Interfaces.*;
 
 import java.util.*;
 
+import junit.framework.Assert;
+
 /**
  * Manages all transactions between views, controllers, and models.
  * Creates new Stories, StoryFragments, etc.
@@ -303,6 +305,9 @@ IStoryModelDirector {
 		}
 
 		m_stories.put(newStory.getId(), newStory);
+		m_currentStory = newStory;
+		SaveStory();
+		m_db.setAuthoredStory(newStory);
 		m_fragmentList.put(headFragment.getFragmentID(), headFragment);
 
 		PublishCurrentStoryChanged();
@@ -433,27 +438,8 @@ IStoryModelDirector {
 	/**
 	 * Get a fragment from the database
 	 */
-	public StoryFragment getFragment(UUID fragmentId) {
-		// The fragment should be part of the current story
-		HashSet<UUID> fragmentIds = m_currentStory.getFragments();
-		UUID theId = null;
-		StoryFragment result = null;
-
-		// verify that the id is indeed part of the current story!
-		for(UUID id : fragmentIds)
-		{
-			if(fragmentId.equals(id))
-			{
-				theId = id;
-				break;
-			}
-		}
-
-		if(theId == null)
-		{
-			// Then you requested an id not attached to the current story!
-			throw new RuntimeException("Requested Fragment Id not attached to current story!");
-		}
+	public StoryFragment getFragment(UUID theId) {
+		StoryFragment result = null;	
 
 		if(m_fragmentList.containsKey(theId))
 		{
@@ -695,11 +681,56 @@ IStoryModelDirector {
 
 	public void download() {
 		if(m_currentStory != null) {
-			m_stories.put(m_currentStory.getId(), m_currentStory);
-			m_db.setStory(m_currentStory);
 			for(UUID fragmentId : m_currentStory.getFragments()) {
 				getFragmentOnline(fragmentId, true);
 			}
+			SaveStory();
 		}
 	}
+
+	@Override
+	public UUID setStoryToAuthor(UUID storyId, String username) {
+		if(m_db.getAuthoredStory(storyId))
+			return storyId;
+		
+		Story story = getStory(storyId).newId();
+		List<StoryFragment> newFragments = new ArrayList<StoryFragment>();
+		Map<UUID,UUID> oldToNew = new HashMap<UUID, UUID>();
+		
+		for(UUID fragmentId : story.getFragments()) {
+			try {
+				StoryFragment fragment = getFragment(fragmentId).newId();
+				fragment.setStoryID(story.getId());
+				newFragments.add(fragment);
+				oldToNew.put(fragmentId, fragment.getFragmentID());
+			} catch(NullPointerException e) {
+				Log.e(TAG, "Error: ", e);
+			}
+		}
+		
+		for(StoryFragment fragment : newFragments) {
+			for(Choice choice : fragment.getChoices()) {
+				if(choice != null)
+					choice.setTarget(oldToNew.get(choice.getTarget()));
+			}
+			m_db.setStoryFragment(fragment);
+			m_fragmentList.put(fragment.getFragmentID(), fragment);
+			story.addFragment(fragment);
+		}
+		
+		story.setHeadFragmentId(oldToNew.get(story.getHeadFragmentId()));
+		story.setAuthor(username);
+		selectStory(storyId);
+		SaveStory();
+		m_db.setAuthoredStory(story);
+		LoadStories();
+		
+		return story.getId();
+	}
+
+	@Override
+	public boolean isAuthored(UUID storyId) {
+		return m_db.getAuthoredStory(storyId);
+	}
+
 }
